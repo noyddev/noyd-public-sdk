@@ -1,9 +1,60 @@
-# NOYD Network SDK
-### Post-Quantum Sovereign Transport Layer
+# NOYD Public SDK
+### Post-Quantum Cryptography Telemetry — Public MVP
 
 [![License: Proprietary](https://img.shields.io/badge/License-Proprietary-blue.svg)](LICENSE)
-[![Go Version](https://img.shields.io/badge/Go-1.23+-00ADD8.svg)](https://go.dev)
-[![Rust](https://img.shields.io/badge/Rust-1.80+-DEA584.svg)](https://www.rust-lang.org)
+[![Go Version](https://img.shields.io/badge/Go-1.22+-00ADD8.svg)](https://go.dev)
+
+---
+
+## Overview
+
+This is the **Public MVP for the NOYD Post-Quantum Cryptography Telemetry SDK**. It provides a Go-language interface for connecting to the NOYD service, which uses NIST-standardized lattice-based cryptographic primitives (ML-KEM-768 and ML-DSA-65) to secure communications against both classical and quantum adversaries.
+
+The SDK automatically connects to our live production server at **https://noyd-public-sdk.onrender.com**.
+
+---
+
+## Installation
+
+Install the SDK in your Go project:
+
+```bash
+go get github.com/noyddev/noyd-public-sdk
+```
+
+---
+
+## Quick Start
+
+```go
+package main
+
+import (
+    "log"
+    noyd "github.com/noyddev/noyd-public-sdk"
+)
+
+func main() {
+    // Connect to the NOYD production server (https://noyd-public-sdk.onrender.com)
+    session, err := noyd.Connect("https://noyd-public-sdk.onrender.com")
+    if err != nil {
+        log.Fatalf("Connection failed: %v", err)
+    }
+    defer session.Close()
+
+    // Send a message
+    if err := session.Send([]byte("hello post-quantum world")); err != nil {
+        log.Fatalf("Send failed: %v", err)
+    }
+
+    // Receive a response
+    reply, err := session.Receive()
+    if err != nil {
+        log.Fatalf("Receive failed: %v", err)
+    }
+    log.Printf("Reply: %s", string(reply))
+}
+```
 
 ---
 
