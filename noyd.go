@@ -74,6 +74,7 @@ type Session struct {
 	Metrics    []TelemetryMetric
 	mu         sync.RWMutex
 	httpClient *http.Client
+	apiKey     string
 }
 
 // -----------------------------------------------------------------------------
@@ -82,14 +83,26 @@ type Session struct {
 
 // Config holds SDK configuration parameters.
 type Config struct {
+	APIKey       string
 	TimeoutMs    uint32
 	RetryCount   int
 	RetryDelayMs int
 }
 
 // DefaultConfig returns the default SDK configuration.
+// Note: APIKey must be set before use via NewConfigWithAPIKey or by setting Config.APIKey.
 func DefaultConfig() Config {
 	return Config{
+		TimeoutMs:    10000,
+		RetryCount:   3,
+		RetryDelayMs: 500,
+	}
+}
+
+// NewConfigWithAPIKey returns a Config with the API key pre-set.
+func NewConfigWithAPIKey(apiKey string) Config {
+	return Config{
+		APIKey:       apiKey,
 		TimeoutMs:    10000,
 		RetryCount:   3,
 		RetryDelayMs: 500,
@@ -100,21 +113,39 @@ func DefaultConfig() Config {
 // Connect Function
 // -----------------------------------------------------------------------------
 
+// ErrMissingAPIKey is returned when no API key is provided.
+var ErrMissingAPIKey = errors.New("noyd: API key is required")
+
 // Connect establishes a post-quantum-secured connection to a NOYD node.
 // Performs ML-KEM-768 encapsulation and ML-DSA-65 signing handshake.
 // Returns an active Session or a typed sentinel error.
+// Deprecated: Use ConnectWithConfig or ConnectWithAPIKey instead.
 func Connect(endpoint string) (*Session, error) {
 	return ConnectWithConfig(endpoint, DefaultConfig())
 }
 
+// ConnectWithAPIKey connects using an API key (read from environment variable or direct input).
+func ConnectWithAPIKey(endpoint, apiKey string) (*Session, error) {
+	if apiKey == "" {
+		return nil, ErrMissingAPIKey
+	}
+	cfg := NewConfigWithAPIKey(apiKey)
+	return ConnectWithConfig(endpoint, cfg)
+}
+
 // ConnectWithConfig connects with explicit SDK configuration.
+// The API key must be set in cfg.APIKey.
 func ConnectWithConfig(endpoint string, cfg Config) (*Session, error) {
 	if endpoint == "" {
 		return nil, ErrConnectionFailed
 	}
 
+	if cfg.APIKey == "" {
+		return nil, ErrMissingAPIKey
+	}
+
 	// Emit PQC handshake telemetry
-	metric := performPQCHandshake(endpoint)
+	metric := performPQCHandshake(endpoint, cfg.APIKey)
 
 	if metric.Status != "ESTABLISHED" {
 		return nil, ErrHandshakeTimeout
@@ -125,6 +156,7 @@ func ConnectWithConfig(endpoint string, cfg Config) (*Session, error) {
 		Endpoint:  endpoint,
 		Connected: true,
 		Metrics:   []TelemetryMetric{metric},
+		apiKey:    cfg.APIKey,
 		httpClient: &http.Client{
 			Timeout: time.Duration(cfg.TimeoutMs) * time.Millisecond,
 		},
@@ -135,8 +167,25 @@ func ConnectWithConfig(endpoint string, cfg Config) (*Session, error) {
 }
 
 // performPQCHandshake simulates the ML-KEM-768 + ML-DSA-65 handshake.
-func performPQCHandshake(endpoint string) TelemetryMetric {
+func performPQCHandshake(endpoint, apiKey string) TelemetryMetric {
 	start := time.Now()
+
+	// Create HTTP client for telemetry connection
+	client := &http.Client{Timeout: 5 * time.Second}
+
+	// Prepare telemetry request with X-API-Key header
+	req, err := http.NewRequest("POST", endpoint+"/telemetry/handshake", nil)
+	if err == nil {
+		req.Header.Set("X-API-Key", apiKey)
+		req.Header.Set("Content-Type", "application/json")
+
+		// Send telemetry handshake request
+		resp, err := client.Do(req)
+		if err == nil {
+			defer resp.Body.Close()
+			log.Printf("[NOYD] Telemetry handshake response → status=%d", resp.StatusCode)
+		}
+	}
 
 	// Simulate ML-KEM-768 key generation
 	keyGenStart := time.Now()

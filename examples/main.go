@@ -6,14 +6,22 @@ package main
 import (
 	"fmt"
 	"log"
+	"os"
 
 	noyd "github.com/noyddev/noyd-public-sdk"
 )
 
 func main() {
-	// Connect to the NOYD production server (https://noyd-public-sdk.onrender.com)
-	// The Connect function performs a post-quantum handshake and returns an active session.
-	session, err := noyd.Connect("https://noyd-public-sdk.onrender.com")
+	// Read API key from environment variable for security
+	apiKey := os.Getenv("NOYD_DEVELOPER_KEY")
+	if apiKey == "" {
+		log.Fatal("NOYD_DEVELOPER_KEY environment variable is not set")
+	}
+
+	// Connect to the NOYD production server using API key authentication
+	// The ConnectWithAPIKey function performs a post-quantum handshake
+	// and includes the X-API-Key header in all telemetry requests.
+	session, err := noyd.ConnectWithAPIKey("https://noyd-public-sdk.onrender.com", apiKey)
 	if err != nil {
 		log.Fatalf("Failed to connect to NOYD server: %v", err)
 	}
