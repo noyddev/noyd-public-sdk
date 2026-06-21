@@ -1,0 +1,6 @@
+FROM alpine:latest
+RUN apk add --no-cache ca-certificates openssl
+# هنا نحدد المنفذ الذي ضبطناه في ريندر
+EXPOSE 7879
+# أمر تشغيل النواة الافتراضي (تأكد من رفع ملف التشغيل لاحقاً)
+CMD ["./noyd-eval-bin"]
