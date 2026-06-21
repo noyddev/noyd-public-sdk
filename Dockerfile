@@ -153,7 +153,7 @@ RUN mkdir -p /build/cmd/noyd-eval && \
     CGO_ENABLED=0 go build -ldflags="-s -w" -o /noyd-eval-bin /build/cmd/noyd-eval
 
 # Verify binary
-RUN ls -la /noyd-eval-bin && file /noyd-eval-bin
+RUN ls -la /noyd-eval-bin 
 
 
 # -----------------------------------------------------------------------------
