@@ -1,63 +1,238 @@
-# NOYD v1.0 — Post-Quantum Security Platform (Hardened Sandbox Prototype)
-Language: Rust
+# NOYD Network SDK
+### Post-Quantum Sovereign Transport Layer
 
-Runtime: Tokio
+[![License: Proprietary](https://img.shields.io/badge/License-Proprietary-blue.svg)](LICENSE)
+[![Go Version](https://img.shields.io/badge/Go-1.23+-00ADD8.svg)](https://go.dev)
+[![Rust](https://img.shields.io/badge/Rust-1.80+-DEA584.svg)](https://www.rust-lang.org)
 
-Target Readiness: 40%
+---
 
-Compliance: Truth--First
-##  Overview
-**NOYD v1.0** is a sovereign, high-assurance post-quantum security infrastructure framework implemented as a **Hardened Sandbox Prototype**. Built entirely in safe Rust over the Tokio async runtime, the platform strictly enforces a **"Truth-First"** engineering discipline—mapping out system capability based solely on verified mathematical properties, deterministic testing, and continuous adversarial emulation.
-##  System Readiness Matrix
-| Feature / Subsystem | Status | Verification Base |
-|---|---|---|
-| **PQC Primitives (ML-KEM / ML-DSA)** | PARTIALLY VERIFIED | Local bitwise roundtrip & NIST FIPS 203/204 invariant compliance. |
-| **Codec Network Parsing** | VERIFIED | 64KB Frame guard completely neutralizing heap-based RDoS. |
-| **Shamir Secret Sharing** | VERIFIED | Exact polynomial reconstruction over GF(256) fields with corruption hooks. |
-| **Memory Isolation & Scrubbing** | VERIFIED | Manual Zeroize and ZeroizeOnDrop integration on Tokio context shifts. |
-| **Byzantine Fault Testing** | UNVERIFIED | Requires external multi-node cluster deployment (Out of Scope for prototype). |
-| **Compliance Certifications (FIPS, FedRAMP)** | NOT CERTIFIED | Intentional design exclusion; target requires independent third-party audit. |
-###  Total Readiness Score: **320 / 800 (40.0%)**
-*This project is an advanced research skeleton/prototype. It is NOT production-ready, NOT government-grade, and NOT independently audited.*
-## 📁Repository Architecture
-```
-├── Cargo.toml                  # Dependency configurations (Zero high-level framework dependencies)
-├── src/                        # Protocol core loop layers
-│   ├── main.rs                 # Truth-First execution core & simulation logger
-│   ├── error.rs                # Extended zero-allocation error taxonomy
-│   ├── crypto/                 # Abstract PQ-Registry and algorithm agility handlers
-│   ├── memory/                 # Pinned buffers and zeroizable memory spaces
-│   └── network/                # Endian-invariant wire codec parsing engines
-├── fuzz/                       # Automated Invariant Test Runners
-│   ├── ml_kem_kat.rs           # Core KEM bit-length accuracy validator
-│   ├── ml_dsa_kat.rs           # Forgery & single-bit signature manipulation detector
-│   ├── codec_invariant.rs      # Stream parser buffer boundary fuzzer
-│   └── shamir_property.rs      # Galois Field math correctness verifier
-├── simulator/                  # Local Host Malicious Injection Engine
-└── docs/                       # Technical verification manifests and telemetry logs
+## What is NOYD?
+
+NOYD is a **high-performance post-quantum secure transport layer** for sovereign enterprise infrastructure. It provides cryptographic protection against both classical and quantum adversaries using NIST-standardized lattice-based primitives (ML-KEM-768 + ML-DSA-65).
+
+**The open-core model:** The interface layers, SDK facades, deployment manifests, and the mathematical security framework are fully open-source. The **cryptographic core engine** ships as a pre-compiled, cryptographically signed binary — delivering maximum security without exposing implementation details.
+
+---
+
+## Open-Core Architecture
 
 ```
-##  Compilation & Verification
-Ensure you have the latest stable Rust toolchain installed.
-### 1. Run Core Test Suite & KAT Invariants
+Application Layer
+  ├── Go:  noyd.Connect(addr) → client.Send/Receive
+  └── Rust: noyd::connect(addr) → session.send/recv
+         │  Standard SDK call (no crypto visible)
+         ▼
+  NOYD SDK Interface (OPEN-SOURCE)
+  ├── go-sdk/noyd.go       — Clean Go facade
+  ├── rust-sdk/src/facade.rs — Clean Rust async facade
+  └── k8s/                 — Kubernetes deployment manifests
+         │  FFI / cgo (pre-linked binary)
+         ▼
+  NOYD Core Engine (PROPRIETARY — pre-compiled binary)
+  ├── libnoyd_core.so / .a / .dylib
+  ├── ML-KEM-768 key exchange
+  ├── ML-DSA-65 authentication
+  ├── Fertik self-healing state machine
+  └── 64KB deterministic wire protocol
+```
+
+---
+
+## Quick Start
+
+### Go
+
+```go
+package main
+
+import (
+    "log"
+    noyd "github.com/noyddev/Noydmvp/go-sdk"
+)
+
+func main() {
+    client, err := noyd.Connect("localhost:7878")
+    if err != nil {
+        log.Fatal(err)
+    }
+    defer client.Close()
+
+    if err := client.Send([]byte("hello post-quantum world")); err != nil {
+        log.Fatal(err)
+    }
+
+    reply, err := client.Receive()
+    if err != nil {
+        log.Fatal(err)
+    }
+    log.Printf("reply: %s", string(reply))
+}
+```
+
+**Build:**
 ```bash
-cargo test --workspace
-
+# Requires the NOYD Core evaluation binary (see "Getting the Core" below)
+go build -ldflags="-linkmode=external -extldflags=-static" ./cmd/client
 ```
-### 2. Execute Local Adversarial Simulation
-To spin up the network prototype, negotiate cryptographic suites, and simulate an interception of an infrastructure Sybil attack:
+
+### Rust
+
+```rust
+use noyd::connect;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let mut session = connect("localhost:7878").await?;
+
+    session.send(b"hello post-quantum world").await?;
+    let reply = session.recv().await?;
+    session.close().await?;
+
+    println!("reply: {}", String::from_utf8_lossy(&reply));
+    Ok(())
+}
+```
+
+**Build:**
 ```bash
-cargo run --release
-
+# Requires the NOYD Core .rlib (see "Getting the Core" below)
+cargo build --release
 ```
-##  Mathematical Guarantees
- 1. **RDoS Deflation Matrix:** Memory allocations are deferred until header signatures clear the explicit length threshold (65536\text{ bytes}). Malformed data sizes are dropped instantly at the kernel transport boundary.
- 2. **Side-Channel Clean Context:** Session secrets are bound to deterministic epoch durations. Upon compilation drops, active blocks clear underlying cache buffers manually, mitigating pointer leakage across worker threads.
- 3. **Galois Field Invariance:** Multi-path routing data split via Shamir interpolation utilizes the standard AES irreducible polynomial primitive (x^8 + x^4 + x^3 + x + 1), forcing strict failure states on contaminated inputs.
-##  Enterprise & R&D Roadmap
-To bridge the remaining **60% gap** to full enterprise production-readiness, collaborative development with financial or sovereign R&D partners must address:
- * **Byzantine Clustering Execution:** Moving from local Tokio execution loop simulations to real multi-node configurations across 10,000+ distributed network zones.
- * **Hardware Power/Timing Cryptanalysis:** Comprehensive profiling against physical side-channel vector extractions (DPA/SPA).
- * **Official Compliance Audits:** Formal lab verification for CAVP validation, FIPS 140-3 compliance submission, and third-party independent source audits.
-##  Disclaimer
-This software is provided strictly as a **research-grade evaluation tool** and simulation framework. It contains NO commercial warranties, and should NOT be deployed in live financial, defense, or infrastructure applications without preceding independent cryptographic validation and official compliance certification.
+
+---
+
+## Getting the Core Binary
+
+The cryptographic engine ships as a pre-compiled, signed binary.
+
+### Option 1: Evaluation Build (Free Tier)
+
+Download the signed evaluation build from the NOYD developer portal:
+
+```bash
+mkdir -p go-sdk/libs
+curl -L https://noyd.dev/eval/libnoyd_core.so \
+    -o go-sdk/libs/libnoyd_core.so
+```
+
+The evaluation build is rate-limited and intended for development/testing purposes only.
+Sign up at [noyd.dev](https://noyd.dev) for access credentials.
+
+### Option 2: Enterprise Build
+
+Enterprise customers receive a cryptographically signed production binary through
+their authorized distribution channel. Contact your NOYD account team.
+
+---
+
+## Deployment
+
+Deploy the NOYD daemon to a Kubernetes cluster with Calico, Cilium, or Weave
+(CNI plugin required for NetworkPolicy enforcement).
+
+```bash
+# Create the isolated namespace and deploy
+kubectl apply -f k8s/daemon-statefulset.yaml
+kubectl apply -f k8s/network-policy.yaml
+
+# Verify the StatefulSet is healthy
+kubectl get pods -n noyd-system
+kubectl rollout status statefulset/noyd-node -n noyd-system
+
+# Watch the Fertik liveness probes
+kubectl get pods -n noyd-system -w
+
+# Check node logs
+kubectl logs -n noyd-system -l app.kubernetes.io/name=noyd --tail=100
+```
+
+**Prerequisites:**
+- Kubernetes 1.28+
+- CNI plugin with NetworkPolicy support
+- `kubectl` configured with cluster access
+
+---
+
+## Stress-Testing the Telemetry Endpoints
+
+Once deployed, validate the system's self-healing behaviour using the included test scripts.
+
+### Prerequisites
+
+```bash
+# Enable metrics-server for kubectl top pods
+kubectl apply -f k8s/metrics-server.yaml   # or your cloud provider addon
+```
+
+### Run the Reboot Loop Stress Test
+
+```bash
+# Inject failures and verify container restarts (3 cycles)
+./scripts/test-reboot-loop.sh 0 3
+
+# Expected: Container restarted within MAX_WAIT=60s, Fertik transitions to Failed
+```
+
+### Run the Telemetry Profiler
+
+```bash
+# Poll CPU/memory every 5s for 5 minutes
+./scripts/profile-telemetry.sh --duration 300 --interval 5
+
+# Or alongside the reboot loop
+./scripts/profile-telemetry.sh --stress-test ./scripts/test-reboot-loop.sh 0 3
+
+# Outputs:
+#   logs/telemetry.csv        — structured metrics (CPU, memory, deltas)
+#   logs/telemetry.log        — annotated samples
+#   logs/telemetry_alerts.log — breach events (>512Mi, >500m CPU, leak suspect)
+```
+
+---
+
+## Security Model
+
+The NOYD transport layer provides the following guarantees, formally specified in `docs/WHITEPAPER.md`:
+
+| Property | Mechanism |
+|----------|-----------|
+| Post-quantum key exchange | ML-KEM-768 (NIST FIPS 203) — Module-LWE, Level 3 |
+| Post-quantum authentication | ML-DSA-65 (NIST FIPS 204) — Module-Lattice, Level 3 |
+| Memory sanitization | Triple-pass zeroization on all key material |
+| Frame integrity | Hard 64KB envelope, constant-time length verification |
+| Self-healing | Fertik deterministic state machine, 1500ms timeout discipline |
+
+The cryptographic security proof sketch, Fertik state machine specification, and
+performance benchmarks are available in `docs/WHITEPAPER.md`.
+
+---
+
+## Open-Source Components
+
+The following components are fully open-source under the LICENSE file:
+
+| Component | Path |
+|-----------|------|
+| Go SDK public facade | `go-sdk/noyd.go` |
+| Go SDK error types | `go-sdk/errors.go` |
+| Rust SDK public facade | `rust-sdk/src/facade.rs` |
+| Rust SDK public interface | `rust-sdk/src/lib.rs` |
+| Kubernetes manifests | `k8s/*.yaml` |
+| Fertik stress-test | `scripts/test-reboot-loop.sh` |
+| Telemetry profiler | `scripts/profile-telemetry.sh` |
+
+**Proprietary components** (NOT in this repository):
+- ML-KEM-768 and ML-DSA-65 cryptographic implementations
+- The wire protocol codec (NoydWireCodec)
+- The NoydClient handshake and session management logic
+- All internal error handling and state machine implementations
+
+---
+
+## License
+
+This repository contains open-source interface components. The NOYD Core binary
+engine is proprietary software. See the [LICENSE](LICENSE) file for details.
+
+**NOYD Core v1.0 — All Rights Reserved.**
