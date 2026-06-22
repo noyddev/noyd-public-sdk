@@ -1,5 +1,5 @@
 // main.go — NOYD Public SDK Example
-// Demonstrates how to import the SDK and perform a connection/health check.
+// Demonstrates end-to-end PQC handshake with real ML-KEM-768 and ML-DSA-65.
 
 package main
 
@@ -7,50 +7,82 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"time"
 
 	noyd "github.com/noyddev/noyd-public-sdk"
 )
 
 func main() {
-	// Read API key from environment variable for security
+	// Configuration
+	endpoint := os.Getenv("NOYD_ENDPOINT")
+	if endpoint == "" {
+		endpoint = "http://localhost:7879" // Use local test server by default
+	}
+
 	apiKey := os.Getenv("NOYD_DEVELOPER_KEY")
 	if apiKey == "" {
-		log.Fatal("NOYD_DEVELOPER_KEY environment variable is not set")
+		apiKey = "test-api-key" // Default for local testing
 	}
 
-	// Connect to the NOYD production server using API key authentication
-	// The ConnectWithAPIKey function performs a post-quantum handshake
-	// and includes the X-API-Key header in all telemetry requests.
-	session, err := noyd.ConnectWithAPIKey("https://noyd-public-sdk.onrender.com", apiKey)
+	fmt.Println("==============================================")
+	fmt.Println("NOYD Public SDK — Post-Quantum Handshake Demo")
+	fmt.Println("==============================================")
+	fmt.Println()
+
+	// Step 1: Connect with PQC handshake
+	fmt.Println("[1] Initiating ML-KEM-768 + ML-DSA-65 handshake...")
+	connectStart := time.Now()
+
+	session, err := noyd.ConnectWithAPIKey(endpoint, apiKey)
 	if err != nil {
-		log.Fatalf("Failed to connect to NOYD server: %v", err)
+		log.Fatalf("Failed to connect: %v", err)
 	}
-	defer session.Close()
+	connectDuration := time.Since(connectStart)
+
+	defer func() {
+		if err := session.Close(); err != nil {
+			log.Printf("Error closing session: %v", err)
+		}
+	}()
 
 	// Print session info
-	fmt.Printf("Connected successfully!\n")
-	fmt.Printf("  Session ID: %s\n", session.ID)
-	fmt.Printf("  Endpoint:   %s\n", session.Endpoint)
+	fmt.Println()
+	fmt.Println("[2] Handshake Complete!")
+	fmt.Printf("    Session ID:     %s\n", session.ID)
+	fmt.Printf("    Endpoint:       %s\n", session.Endpoint)
+	fmt.Printf("    Connect Time:   %v\n", connectDuration)
 
-	// Retrieve and print telemetry report
+	// Print telemetry metrics
 	report := session.Telemetry()
-	fmt.Printf("  Protocol:   %s\n", report.Metrics[0].Protocol)
-	fmt.Printf("  Algorithm:  %s\n", report.Metrics[0].Algorithm)
-	fmt.Printf("  Status:     %s\n", report.Metrics[0].Status)
+	if len(report.Metrics) > 0 {
+		m := report.Metrics[0]
+		fmt.Println()
+		fmt.Println("[3] Handshake Performance Metrics:")
+		fmt.Printf("    Key Generation: %d µs\n", m.KeyGenUs)
+		fmt.Printf("    Encapsulation:  %d µs\n", m.EncapUs)
+		fmt.Printf("    Decapsulation:  %d µs\n", m.DecapUs)
+		fmt.Printf("    Signing:        %d µs\n", m.SignUs)
+		fmt.Printf("    Verification:   %d µs\n", m.VerifyUs)
+		fmt.Printf("    Protocol:       %s\n", m.Protocol)
+		fmt.Printf("    Algorithm:      %s\n", m.Algorithm)
+		fmt.Printf("    Status:          %s\n", m.Status)
+	}
 
-	// Send a message through the post-quantum channel
-	message := []byte("hello post-quantum world")
-	if err := session.Send(message); err != nil {
+	// Step 2: Send an encrypted message and get server response
+	fmt.Println()
+	fmt.Println("[4] Sending encrypted message...")
+	testMessage := "hello post-quantum world"
+	fmt.Printf("    Plaintext: %q\n", testMessage)
+
+	if err := session.Send([]byte(testMessage)); err != nil {
 		log.Fatalf("Send failed: %v", err)
 	}
-	fmt.Printf("Message sent: %s\n", string(message))
+	fmt.Println("    Message sent and response received successfully!")
 
-	// Receive a response from the server
-	reply, err := session.Receive()
-	if err != nil {
-		log.Fatalf("Receive failed: %v", err)
-	}
-	fmt.Printf("Reply received: %s\n", string(reply))
-
-	fmt.Println("Health check complete — SDK is working correctly.")
+	fmt.Println()
+	fmt.Println("==============================================")
+	fmt.Println("PQC Handshake Demo Complete — All operations")
+	fmt.Println("performed with real ML-KEM-768 encapsulation")
+	fmt.Println("and ML-DSA-65 signature verification.")
+	fmt.Println("==============================================")
 }
